@@ -1,0 +1,10 @@
+schema_config:
+  configs:
+  - index:
+      # 1 week
+      period: 168h
+
+table_manager:
+  retention_deletes_enabled: true
+  # 90 days
+  retention_period: 2160h

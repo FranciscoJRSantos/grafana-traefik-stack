@@ -1,0 +1,109 @@
+version: '3.9'
+
+services:
+  ###########
+  # GRAFANA #
+  ###########
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./configs/grafana/datasources/localhost.yml:/etc/grafana/provisioning/datasources/monitoring.yml
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.grafana.rule=Host(`grafana.localhost`)
+    - traefik.http.services.grafana.loadbalancer.server.port=3000
+
+  ##############
+  # PROMETHEUS #
+  ##############
+  prometheus:
+    image: prom/prometheus:latest
+    user: root
+    volumes:
+      - ./configs/prometheus/localhost.yml:/etc/prometheus/prometheus.yml
+      - ./configs/prometheus/alerts.localhost.yml:/etc/prometheus/alerts.localhost.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    labels:
+    - traefik.enable=true
+    - traefik.http.routers.prometheus.rule=Host(`prometheus.localhost`)
+    - traefik.http.services.prometheus.loadbalancer.server.port=9090
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    command:
+      - '--config.file=/etc/alertmanager/config.yml'
+      - '--storage.path=/alertmanager'
+    volumes:
+      - ./configs/alertmanager/localhost.yml:/etc/alertmanager/config.yml
+      - alertmanager-data:/alertmanager
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    volumes:
+      - ./configs/node-exporter/localhost.yml:/etc/node-exporter/node_meta.prom
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points'
+      - "^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)"
+
+  ############
+  # CADVISOR #
+  ############
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.44.1-test
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+
+  ########
+  # LOKI #
+  ########
+  loki:
+    image: grafana/loki:latest
+    volumes:
+    - loki-data:/loki
+    - ./configs/loki/localhost.yml:/etc/loki/config.yml
+
+  promtail:
+    image: grafana/promtail:latest
+    volumes:
+    - /var/log:/var/log:ro
+    - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    - ./configs/promtail/localhost.yml:/etc/promtail/config.yml
+
+  ###########
+  # TRAEFIK #
+  ###########
+  traefik:
+    image: traefik:2.8.1
+    ports:
+    - 80:80
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+    - --log.level=INFO
+    - --accesslog=true
+    - --providers.docker
+    - --providers.docker.exposedbydefault=false
+    - --entrypoints.web.address=:80
+    - --metrics.prometheus=true
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+  alertmanager-data:
